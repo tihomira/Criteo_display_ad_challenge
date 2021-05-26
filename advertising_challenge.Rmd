@@ -1,0 +1,207 @@
+---
+title: "project01"
+author: "eniyei"
+date: "April 26, 2018"
+output: html_document
+---
+
+# Display Advertising Challenge
+(https://www.kaggle.com/c/criteo-display-ad-challenge/data)
+
+The data was no longer available at the speciefied link
+
+I was able to find it from Criteo.
+(http://labs.criteo.com/2014/02/kaggle-display-advertising-challenge-dataset/)
+
+I suspect it is not the exact data set used for the challenge because of the number, oder, name of the variables. It consists of more than 46M rows. I used random sampling to obtain 300000 rows of data. /with respect to my available resources/
+
+About the data
+Data fields
+Label - Target variable that indicates if an ad was clicked (1) or not (0).
+I1-I13 - A total of 13 columns of integer features (mostly count features).
+C1-C26 - A total of 26 columns of categorical features. The values of these features have been hashed onto 32 bits for anonymization purposes. 
+The semantic of the features is undisclosed.
+ 
+When a value is missing, the field is empty.
+
+Until I know more about how to deal with the hashed values I would leave them out from the analysis. /"Hash functions may output the same value for different inputs" - To me that doesn't speak accuracy in the calculations. But as I said. I will pay attention to that later.  
+
+I plan to use Logistic regression for this task.  
+
+```{r}
+train300 <- read_csv("C://Users/Public/Documents/Tiharis R/train300.csv", col_names = FALSE, trim_ws = FALSE)[,1:13]
+
+
+for (i in c(2:ncol(train300))) {
+      train300[,i] <- as.numeric(as.integer(as.character(unlist(train300[,i]))))
+}
+
+
+train300$X1 <- as.factor(train300$X1)
+
+levels(train300_copy$X1)
+# Removing allegedly a categorical variable that left.
+train300$X10 <- NULL
+
+
+summary(train300)
+
+```
+From the summary I see that all the variables are heavily skewed to the right. Mean, Median difference is huge.
+I see many missing values, so I'll plot them to see whether there is a pattern or something that might speak up. 
+The data resides above the 3rd quartile meaning that 75% of the data is less than the number corespoding to the 3rd quartile.
+In context of the variable I can't speak, so I can't take any well-argumented decisions. I may treat these extreme high 
+data points as are or bin the variable. I also think about the NA's - for some variables missing values may make sense. For that they should be treated accordingly. We'll see.
+What I also notice is the same extreme value '511156000' in variables X6, X8, X11 and X13. 
+The same is with X3 and X4 '87552397' and X5 and X7 '98237733'.
+
+```{r}
+prop.table(table(train300$X1))
+```
+there is a class bias unfortunately. I may sample more balanced data for the model but we'll see.
+
+*******************
+```{r}
+train300_copy <-  train300
+
+# library(Amelia)
+# plot the NA's
+missmap(train300)
+# missing values in percentage
+round(sapply(train300_copy, function(x) sum(length(which(is.na(x))))) / nrow(train300_copy),3)*100
+
+```
+after seeing the missing NA's plot I decide to remove my attention from the variables X12 and X13. Imputing any numbers would lead to creating data insead of invastigating it. Probably X11 will go away as well but first I will investigate it further. The imputation I'm considering is k-NN /k nearest neighbor/.But we'll see.
+
+
+
+```{r}
+# I will do log transformation of the variables in order to see their distribution a little bit better.
+hist(log(train300_copy$X13+1),breaks=80)
+rug(jitter(log(train300_copy$X13+1)))
+hist(log(train300_copy$X12+1),breaks=80)
+rug(jitter(log(train300_copy$X12+1)))
+hist(log(train300_copy$X11+1),breaks=80)
+rug(jitter(log(train300_copy$X11+1)))
+hist(log(train300_copy$X9+1),breaks=80)
+rug(jitter(log(train300_copy$X9+1)))
+hist(log(train300_copy$X8+1),breaks=80)
+rug(jitter(log(train300_copy$X8+1)))
+hist(log(train300_copy$X6+1),breaks=80)
+rug(jitter(log(train300_copy$X6+1)))
+hist(log(train300_copy$X5+1),breaks=80)
+rug(jitter(log(train300_copy$X5+1)))
+hist(log(train300_copy$X4+1),breaks=80)
+rug(jitter(log(train300_copy$X4+1)))
+hist(log(train300_copy$X3+3),breaks=80)
+rug(jitter(log(train300_copy$X3+1)))
+hist(log(train300_copy$X2+3),breaks=80)
+rug(jitter(log(train300_copy$X2+3)))
+
+```
+
+
+```{r}
+# Removing the last 3 variables from the analysis because of too much missing data 
+train300_copy$X13 <- NULL
+train300_copy$X12 <- NULL
+train300_copy$X11 <- NULL
+
+```
+
+
+**************
+```{r}
+# Find the mode for every variable
+      
+MODE <- function(dataframe){
+            DF <- as.data.frame(dataframe)
+            
+            MODE2 <- function(x){      
+                  if (is.numeric(x) == FALSE){
+                        df <- as.data.frame(table(x))  
+                        df <- df[order(df$Freq), ]         
+                        m <- max(df$Freq)        
+                        MODE1 <- as.vector(as.character(subset(df, Freq == m)[, 1]))
+                        
+                        if (sum(df$Freq)/length(df$Freq)==1){
+                              warning("No Mode: Frequency of all values is 1", call. = FALSE)
+                        }else{
+                              return(MODE1)
+                        }
+                        
+                  }else{ 
+                        df <- as.data.frame(table(x))  
+                        df <- df[order(df$Freq), ]         
+                        m <- max(df$Freq)        
+                        MODE1 <- as.vector(as.numeric(as.character(subset(df, Freq == m)[, 1])))
+                        
+                        if (sum(df$Freq)/length(df$Freq)==1){
+                              warning("No Mode: Frequency of all values is 1", call. = FALSE)
+                        }else{
+                              return(MODE1)
+                        }
+                  }
+            }
+            
+            return(as.vector(lapply(DF, MODE2)))
+      }
+
+as.data.frame(MODE(train300_copy))
+
+```
+*********************
+I am considering an option to separate the variables at their mode and thus making them categorical ones. I can't yet decide whether to do it with 2 levels or 3 or 4.. or leave them as they are.
+
+*********************
+I'll display the missing values as well as how many unique values there are for each variable 
+```{r}
+sapply(train300_copy,function(x) sum(is.na(x)))
+sapply(train300_copy, function(x) length(unique(x)))
+```
+
+I will idetify the veriables with zero variance 
+freqCut: looks at the ratio of the most common value to the second most common value  
+# uniqueCut: percentage of distinct values out of the number of total samples
+
+```{r}
+# uniqueCut: percentage of distinct values out of the number of total samples
+nearZeroVar(train300_copy, names = TRUE, freqCut = 19, uniqueCut = 10)
+nearZeroVar(train300_copy, names = TRUE, freqCut = 2, uniqueCut = 20)
+# I'll keep those variables in mind.
+
+```
+
+```{r}
+train300_log <- log(train300[,-1]+3)
+describe(train300_log)
+```
+*************************************************
+ 
+
+
+```{r}
+# Dealing with imputation. kNN for some reason doesn't work
+imputedData <- knnImputation(train300_copy[,c(-1,-2)], k = 3)
+imputedData <- knnImputation(train300_copy[,c(-1,-2)], k = 30)
+# Error: Column indexes must be at most 1 if positive, not 39517, 6223, 100944
+# suggestions from Internet don't seem to help
+
+
+# So, imputing data with predictive mean matching
+
+imputedData300 <- mice(train300_copy, m = 2, maxit = 5, method = 'pmm', seed = 500)
+train300_copy_imputed <- complete(imputedData300,2)
+summary(train300_copy)
+summary(train300_copy_imputed)
+
+# The summary comparison reveals to what extent I influenced the variables. Some of them remain solid, some are influenced a bit, In my oppinion it is quite survivable.
+
+```
+
+
+imputing 
+scaling
+correlation matrix before and after data transformation
+..
+
